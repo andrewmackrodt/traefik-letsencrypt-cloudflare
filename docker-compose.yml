@@ -1,0 +1,50 @@
+x-logging:
+  &default-logging
+  options:
+    max-size: "100k"
+    max-file: "5"
+  driver: json-file
+
+services:
+  nginx:
+    image: nginxproxy/nginx-proxy
+    logging: *default-logging
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+      - ./volumes/nginx/nginx.tmpl:/app/nginx.tmpl
+      - ./volumes/nginx/certs:/etc/nginx/certs
+      - ./volumes/nginx/certs:/etc/nginx/dhparam
+      - ./volumes/nginx/conf.d:/etc/nginx/conf.d
+      - ./volumes/nginx/vhost.d:/etc/nginx/vhost.d
+      - ./volumes/nginx/html:/usr/share/nginx/html
+    restart: unless-stopped
+
+  letsencrypt:
+    image: nginxproxy/acme-companion
+    logging: *default-logging
+    volumes_from:
+      - nginx
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./nginx/acme.sh:/etc/acme.sh
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+  cloudflare:
+    image: tiredofit/nginx-proxy-cloudflare-companion
+    logging: *default-logging
+    environment:
+      CONTAINER_ENABLE_MONITORING: "false"
+      CF_EMAIL: ${CF_EMAIL}
+      CF_TOKEN: ${CF_TOKEN}
+      DOMAIN1: ${CF_DOMAIN}
+      DOMAIN1_PROXIED: true
+      DOMAIN1_ZONE_ID: ${CF_ZONE_ID}
+      TARGET_DOMAIN: ${CF_TARGET:-CF_DOMAIN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - nginx
+    restart: unless-stopped
