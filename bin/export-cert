@@ -1,0 +1,56 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]] || [[ "$1" == "-h"* ]] || [[ "$1" == "--help"* ]]; then
+  echo "usage: export-cert [domain]" >&2
+  exit 1
+fi
+
+baseDir=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd -P)
+acmePath=$(readlink -f "$baseDir/traefik/certs/acme.json")
+
+abort() {
+  echo "error $1" >&2
+  exit 1
+}
+
+[[ -n "$acmePath" ]] \
+  || abort "msg=\"file not found\" path=\"$baseDir/traefik/certs/acme.json\""
+
+which jq >/dev/null 2>&1 \
+  || abort "msg=\"missing executable\" name=\"jq\""
+
+domain=$1
+
+extract() {
+  local value
+  value=$( \
+    jq -r ".letsencrypt.Certificates[]
+              | select(.domain.main==\"$domain\")
+              | .$1" \
+            "$acmePath" \
+      | base64 -d \
+    )
+  [[ -n "$value" ]] \
+    || abort "msg=\"failed to extract property\" path=\"$domain/$1\""
+  echo "$value"
+}
+
+key=$(extract "key")
+fullchain=$(extract "certificate")
+
+[[ -d "$domain" ]] \
+  || mkdir "$domain" \
+  || abort "msg=\"failed to create certificate directory\" path=\"$PWD/$domain\""
+
+overwrite() {
+  if [[ -f "$1" ]] && [[ "$(cat "$1")" == "$2" ]]; then
+    echo "info msg=\"file not modified\" path=\"$1\"" >&2
+    return
+  fi
+  echo "info msg=\"updating file\" path=\"$1\"" >&2
+  echo -n "$2" >"$1" || abort "failed to write file: $1"
+}
+
+overwrite "$domain/privkey.pem" "$key"
+overwrite "$domain/fullchain.pem" "$fullchain"
