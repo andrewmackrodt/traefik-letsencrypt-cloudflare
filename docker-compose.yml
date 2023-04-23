@@ -6,6 +6,9 @@ x-logging:
   driver: json-file
 
 services:
+  ################################################################################
+  # Traefik
+  ################################################################################
   traefik:
     image: traefik:latest
     logging: *default-logging
@@ -71,3 +74,90 @@ services:
     depends_on:
       - traefik
     restart: unless-stopped
+
+
+  ################################################################################
+  # Portainer
+  ################################################################################
+  portainer:
+    image: ${PORTAINER_IMAGE:-portainer/portainer-ce}
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.portainer.rule=Host(`portainer.${CF_DOMAIN}`)
+      - traefik.http.services.portainer.loadBalancer.server.port=9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/portainer/data:/data
+    restart: unless-stopped
+
+
+  ################################################################################
+  # Jenkins
+  ################################################################################
+  jenkins:
+    build: ./services/jenkins
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.jenkins.rule=Host(`jenkins.${CF_DOMAIN}`)
+      - traefik.http.services.jenkins.loadBalancer.server.port=8080
+    environment:
+      TINI_SUBREAPER: ""
+    init: true
+    ports:
+      - 50000:50000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/jenkins/jenkins_home:/var/jenkins_home
+    restart: unless-stopped
+
+
+  ################################################################################
+  # BookStack
+  ################################################################################
+  bookstack:
+    image: lscr.io/linuxserver/bookstack
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.bookstack.rule=Host(`wiki.${CF_DOMAIN}`)
+      - traefik.http.services.bookstack.loadBalancer.server.port=80
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      APP_URL: https://wiki.${CF_DOMAIN}
+      DB_HOST: bookstack_mysql
+      DB_USER: bookstack
+      DB_PASS: ${BOOKSTACK_MYSQL_PASSWORD}
+      DB_DATABASE: bookstackapp
+    networks:
+      - bookstack_backend
+      - default
+    volumes:
+      - ./volumes/bookstack/config:/config
+    depends_on:
+      - bookstack_mysql
+    restart: unless-stopped
+
+  bookstack_mysql:
+    image: lscr.io/linuxserver/mariadb
+    logging: *default-logging
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      MYSQL_ROOT_PASSWORD: ${BOOKSTACK_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: bookstackapp
+      MYSQL_USER: bookstack
+      MYSQL_PASSWORD: ${BOOKSTACK_MYSQL_PASSWORD}
+    networks:
+      - bookstack_backend
+    volumes:
+      - bookstack_mysql:/config
+    restart: unless-stopped
+
+networks:
+  bookstack_backend:
+
+volumes:
+  bookstack_mysql:
