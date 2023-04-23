@@ -33,33 +33,7 @@ CF_ZONE_ID=1234567890
 #### Traefik Dashboard
 
 The Traefik Dashboard can be enabled at `https://traefik.${CF_DOMAIN}` by
-setting the environment variables:
-
-- `TRAEFIK_API_BASIC_AUTH_USERS`
-- `TRAEFIK_API_ENABLE`
-
-HTTP basic auth is used for authentication, credentials can be generated with
-`htpasswd`, e.g.
-
-```
-# generate password interactively using bcrypt (recommended)
-htpasswd -nB admin
-> admin:$2y$05$mHw3zw1oXbgwHrHTIVQn2uHkPlyirynsXNSHPn8GUWEzoDT2QESnu
-
-# generate password non-interactively using bcrypt
-htpasswd -nbB admin password
-> admin:$2y$05$mHw3zw1oXbgwHrHTIVQn2uHkPlyirynsXNSHPn8GUWEzoDT2QESnu
-```
-
-It is recommended to enclose the credentials using a single quote when adding
-them to `.env`. This prevents errors with docker-compose and/or your shell when
-interpreting `$`, e.g.
-
-```sh
-TRAEFIK_API_BASIC_AUTH_USERS='admin:$2y$05$2UxZBKKL3T8qZEhdExSczOI5OYnCLJj14o3zjJPswMTWmFAhARXNG'
-```
-
-Multiple credentials can be specified by separating them with a comma.
+setting the environment variable `TRAEFIK_API_ENABLE=true`.
 
 ### Starting
 

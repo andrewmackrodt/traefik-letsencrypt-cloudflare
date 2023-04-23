@@ -13,9 +13,13 @@ services:
     image: traefik:latest
     logging: *default-logging
     labels:
+      # register authentik forward proxy middleware
+      - traefik.http.middlewares.authentik.forwardAuth.address=http://authentik_server:9000/outpost.goauthentik.io/auth/traefik
+      - traefik.http.middlewares.authentik.forwardAuth.trustForwardHeader=true
+      - traefik.http.middlewares.authentik.forwardAuth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version
+      # enable traefik dashboard using authentik middleware
       - traefik.enable=${TRAEFIK_API_ENABLE:-false}
-      - traefik.http.middlewares.api-auth.basicauth.users=${TRAEFIK_API_BASIC_AUTH_USERS:-}
-      - traefik.http.routers.api.middlewares=api-auth
+      - traefik.http.routers.api.middlewares=authentik
       - traefik.http.routers.api.rule=Host(`traefik.${CF_DOMAIN}`)
       - traefik.http.routers.api.service=api@internal
       - traefik.http.services.api.loadBalancer.server.port=80 # dummy port required in host mode
@@ -73,6 +77,111 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - traefik
+    restart: unless-stopped
+
+
+  ################################################################################
+  # authentik
+  ################################################################################
+  authentik_server:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.4.1}
+    logging: *default-logging
+    labels:
+      - traefik.docker.network=${COMPOSE_PROJECT_NAME}_default
+      - traefik.enable=true
+      - traefik.http.routers.authentik.rule=Host(`auth.${CF_DOMAIN}`)
+      - traefik.http.services.authentik.loadBalancer.server.port=9000
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY?:authentik secret key required}
+      AUTHENTIK_POSTGRESQL__HOST: authentik_postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:?database password required}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRESQL_NAME:-authentik}
+      AUTHENTIK_REDIS__HOST: authentik_redis
+      AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL_HOST:-localhost}
+      AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL_PORT:-25}
+      AUTHENTIK_EMAIL__FROM: ${AUTHENTIK_EMAIL_FROM:-authentik@$CF_DOMAIN}
+      AUTHENTIK_EMAIL__USERNAME: ${AUTHENTIK_EMAIL_USERNAME:-}
+      AUTHENTIK_EMAIL__PASSWORD: ${AUTHENTIK_EMAIL_PASSWORD:-}
+      AUTHENTIK_EMAIL__TIMEOUT: ${AUTHENTIK_EMAIL_TIMEOUT:-10}
+      AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL_USE_SSL:-false}
+      AUTHENTIK_EMAIL__USE_TLS: ${AUTHENTIK_EMAIL_USE_TLS:-false}
+    command: server
+    networks:
+      - authentik_backend
+      - default
+    volumes:
+      - ./volumes/authentik/media:/media
+      - ./volumes/authentik/templates:/templates
+    depends_on:
+      - authentik_worker
+    restart: unless-stopped
+
+  authentik_worker:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.4.1}
+    logging: *default-logging
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY?:authentik secret key required}
+      AUTHENTIK_POSTGRESQL__HOST: authentik_postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRESQL_NAME:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:?database password required}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      AUTHENTIK_REDIS__HOST: authentik_redis
+      AUTHENTIK_EMAIL__HOST: ${AUTHENTIK_EMAIL_HOST:-localhost}
+      AUTHENTIK_EMAIL__PORT: ${AUTHENTIK_EMAIL_PORT:-25}
+      AUTHENTIK_EMAIL__FROM: ${AUTHENTIK_EMAIL_FROM:-authentik@$CF_DOMAIN}
+      AUTHENTIK_EMAIL__USERNAME: ${AUTHENTIK_EMAIL_USERNAME:-}
+      AUTHENTIK_EMAIL__PASSWORD: ${AUTHENTIK_EMAIL_PASSWORD:-}
+      AUTHENTIK_EMAIL__TIMEOUT: ${AUTHENTIK_EMAIL_TIMEOUT:-10}
+      AUTHENTIK_EMAIL__USE_SSL: ${AUTHENTIK_EMAIL_USE_SSL:-false}
+      AUTHENTIK_EMAIL__USE_TLS: ${AUTHENTIK_EMAIL_USE_TLS:-false}
+    command: worker
+    user: root
+    networks:
+      - authentik_backend
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/authentik/certs:/certs
+      - ./volumes/authentik/media:/media
+      - ./volumes/authentik/templates:/templates
+    depends_on:
+      - authentik_postgresql
+      - authentik_redis
+    restart: unless-stopped
+
+  authentik_postgresql:
+    image: docker.io/library/postgres:12-alpine
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:?database password required}
+      POSTGRES_DB: ${AUTHENTIK_POSTGRESQL_NAME:-authentik}
+    networks:
+      - authentik_backend
+    volumes:
+      - authentik_postgresql:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+    restart: unless-stopped
+
+  authentik_redis:
+    image: docker.io/library/redis:alpine
+    logging: *default-logging
+    command: --save 60 1 --loglevel warning
+    networks:
+      - authentik_backend
+    volumes:
+      - authentik_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
     restart: unless-stopped
 
 
@@ -157,7 +266,10 @@ services:
     restart: unless-stopped
 
 networks:
+  authentik_backend:
   bookstack_backend:
 
 volumes:
+  authentik_postgresql:
+  authentik_redis:
   bookstack_mysql:
