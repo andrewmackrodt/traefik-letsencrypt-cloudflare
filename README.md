@@ -1,6 +1,6 @@
 # [andrewmackrodt/traefik-letsencrypt-cloudflare](https://github.com/andrewmackrodt/traefik-letsencrypt-cloudflare)
 
-[docker-compose](https://docs.docker.com/compose/overview/) template for running
+[docker compose](https://docs.docker.com/compose/overview/) template for running
 a reverse proxy with support for:
 
 - Let's Encrypt certificate generation (using DNS Challenge)
@@ -64,7 +64,7 @@ Multiple credentials can be specified by separating them with a comma.
 ### Starting
 
 ```sh
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Adding new services
@@ -74,7 +74,7 @@ container creation. For example, to add a service with the subdomain `whoami`
 where `CF_DOMAIN=mydomain.com` (i.e. `whoami.mydomain.com`), use the following
 configuration:
 
-**docker-compose:**
+**docker compose:**
 
 ```yml
 services:
