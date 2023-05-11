@@ -202,6 +202,50 @@ services:
 
 
   ################################################################################
+  # Gitea
+  ################################################################################
+  gitea:
+    image: gitea/gitea
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gitea.rule=Host(`git.${CF_DOMAIN}`)
+      - traefik.http.services.gitea.loadBalancer.server.port=3000
+    environment:
+      USER_UID: ${PUID:-1000}
+      USER_GID: ${PGID:-1000}
+      GITEA__database__DB_TYPE: mysql
+      GITEA__database__HOST: gitea_mysql:3306
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: gitea
+      GITEA__database__PASSWD: ${GITEA_MYSQL_PASSWORD}
+    networks:
+      - gitea_backend
+      - default
+    ports:
+      - ${GITEA_SSH_PORT:-2222}:22
+    volumes:
+      - ./volumes/gitea/data:/data
+    depends_on:
+      - gitea_mysql
+    restart: unless-stopped
+
+  gitea_mysql:
+    image: mysql:8
+    logging: *default-logging
+    environment:
+      MYSQL_ROOT_PASSWORD: ${GITEA_MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: gitea
+      MYSQL_PASSWORD: ${GITEA_MYSQL_PASSWORD}
+      MYSQL_DATABASE: gitea
+    networks:
+      - gitea_backend
+    volumes:
+      - gitea_mysql:/var/lib/mysql
+    restart: unless-stopped
+
+
+  ################################################################################
   # Jenkins
   ################################################################################
   jenkins:
@@ -267,9 +311,11 @@ services:
 
 networks:
   authentik_backend:
+  gitea_backend:
   bookstack_backend:
 
 volumes:
   authentik_postgresql:
   authentik_redis:
+  gitea_mysql:
   bookstack_mysql:
