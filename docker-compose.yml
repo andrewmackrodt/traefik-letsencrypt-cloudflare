@@ -309,6 +309,38 @@ services:
       - bookstack_mysql:/config
     restart: unless-stopped
 
+
+  ################################################################################
+  # Netdata
+  ################################################################################
+  netdata:
+    image: netdata/netdata:stable
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.netdata.middlewares=authentik
+      - traefik.http.routers.netdata.rule=Host(`netdata.${CF_DOMAIN}`)
+      - traefik.http.services.netdata.loadBalancer.server.port=19999
+    pid: host
+    cap_add:
+      - SYS_ADMIN
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    environment:
+      NETDATA_EXTRA_APK_PACKAGES: libvirt-daemon msmtp
+    volumes:
+      - /etc/group:/host/etc/group:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /etc/passwd:/host/etc/passwd:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/netdata/cache:/var/cache/netdata
+      - ./volumes/netdata/config:/etc/netdata
+      - ./volumes/netdata/lib:/var/lib/netdata
+    restart: unless-stopped
+
 networks:
   authentik_backend:
   gitea_backend:
