@@ -84,7 +84,7 @@ services:
   # authentik
   ################################################################################
   authentik_server:
-    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.4.1}
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.5.1}
     logging: *default-logging
     labels:
       - traefik.docker.network=${COMPOSE_PROJECT_NAME}_default
@@ -120,7 +120,7 @@ services:
     restart: unless-stopped
 
   authentik_worker:
-    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.4.1}
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.5.1}
     logging: *default-logging
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY?:authentik secret key required}
@@ -318,6 +318,7 @@ services:
   netdata:
     image: netdata/netdata:stable
     logging: *default-logging
+    hostname: netdata.${CF_DOMAIN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.netdata.middlewares=authentik
