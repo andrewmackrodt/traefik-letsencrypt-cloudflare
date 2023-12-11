@@ -246,6 +246,21 @@ services:
       - gitea_mysql:/var/lib/mysql
     restart: unless-stopped
 
+  gitea_runner:
+    image: gitea/act_runner
+    logging: *default-logging
+    environment:
+      CONFIG_FILE: /config.yaml
+      GITEA_INSTANCE_URL: https://git.${CF_DOMAIN}
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_REGISTRATION_TOKEN}
+    networks:
+      - gitea_backend
+    ports:
+      - 8088:8088
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/gitea_runner/config/config.yaml:/config.yaml
+      - ./volumes/gitea_runner/data:/data
 
   ################################################################################
   # Jenkins

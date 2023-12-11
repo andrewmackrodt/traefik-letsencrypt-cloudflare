@@ -1,0 +1,6 @@
+cache:
+  enabled: true
+  dir: ""
+  host: "172.17.0.1"
+  port: 8088
+
