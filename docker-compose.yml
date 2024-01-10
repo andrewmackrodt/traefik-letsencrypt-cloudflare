@@ -359,6 +359,28 @@ services:
       - ./volumes/netdata/lib:/var/lib/netdata
     restart: unless-stopped
 
+
+  ################################################################################
+  # Nginx File Server
+  ################################################################################
+  static:
+    image: nginx
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.middlewares.staticHeaders.headers.customResponseHeaders.server=
+      - traefik.http.middlewares.staticHeaders.headers.accessControlAllowMethods=GET,OPTIONS
+      - traefik.http.middlewares.staticHeaders.headers.accessControlAllowHeaders=*
+      - traefik.http.middlewares.staticHeaders.headers.accessControlAllowOriginList=*
+      - traefik.http.middlewares.staticHeaders.headers.accessControlMaxAge=3600
+      - traefik.http.routers.static.middlewares=staticHeaders
+      - traefik.http.routers.static.rule=Host(`static.${CF_DOMAIN}`)
+      - traefik.http.services.static.loadBalancer.server.port=80
+    volumes:
+      - ./services/static/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./volumes/static:/var/www/html:ro
+    restart: unless-stopped
+
 networks:
   authentik_backend:
   gitea_backend:
