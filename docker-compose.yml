@@ -84,7 +84,7 @@ services:
   # authentik
   ################################################################################
   authentik_server:
-    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.5.1}
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.6.4}
     logging: *default-logging
     labels:
       - traefik.docker.network=${COMPOSE_PROJECT_NAME}_default
@@ -120,7 +120,7 @@ services:
     restart: unless-stopped
 
   authentik_worker:
-    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2023.5.1}
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2025.6.4}
     logging: *default-logging
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY?:authentik secret key required}
@@ -152,7 +152,7 @@ services:
     restart: unless-stopped
 
   authentik_postgresql:
-    image: docker.io/library/postgres:12-alpine
+    image: docker.io/library/postgres:17-alpine
     logging: *default-logging
     environment:
       POSTGRES_USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
@@ -328,6 +328,234 @@ services:
 
 
   ################################################################################
+  # Open WebUI
+  ################################################################################
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      # guest access to shared chat
+      - traefik.http.middlewares.openWebUiGuestRedirectRegex.redirectRegex.regex=(?:/_app/(version)\.json|/api/(config|models)\b)
+      - traefik.http.middlewares.openWebUiGuestRedirectRegex.redirectRegex.replacement=/static/shared/$${1}$${2}.json
+      - traefik.http.middlewares.openWebUiGuestHeaders.headers.customRequestHeaders.X-authentik-email=guest@${CF_DOMAIN}
+      - traefik.http.routers.openWebUiGuest.middlewares=openWebUiGuestRedirectRegex,openWebUiGuestHeaders
+      - "traefik.http.routers.openWebUiGuest.rule=Host(`shared-chat.${CF_DOMAIN}`) && (\
+            ((Method(`GET`) || Method(`OPTIONS`)) && PathRegexp(`^(\
+                /_app/immutable/\
+                |/_app/version\\.json$\
+                |/api/config$\
+                |/api/models$\
+                |/api/v[0-9]+/[a-z]+/share\
+                |/api/v[0-9]+/auths/?\
+                |/api/v[0-9]+/users/user/settings/?$\
+                |/assets/fonts/\
+                |/auth\
+                |/favicon\\.png$\
+                |/error/?$\
+                |/manifest\\.json$\
+                |/s/[a-f0-9-]+/?$\
+                |/static/\
+                |/ws/socket\\.io/\
+                )`)) \
+            || ((Method(`POST`) || Method(`OPTIONS`)) && PathRegexp(`^/api/v[0-9]+/auths/signin/?$`))\
+          )"
+      - traefik.http.routers.openWebUiGuest.service=openWebUiGuest
+      - traefik.http.services.openWebUiGuest.loadBalancer.server.port=8080
+      # authenticated access
+      - traefik.http.routers.openWebUi.middlewares=openWebUiHeaders
+      - traefik.http.routers.openWebUi.middlewares=authentik
+      - traefik.http.routers.openWebUi.rule=Host(`chat.${CF_DOMAIN}`)
+      - traefik.http.routers.openWebUi.service=openWebUi
+      - traefik.http.services.openWebUi.loadBalancer.server.port=8080
+    environment:
+      CORS_ALLOW_ORIGIN: https://chat.${CF_DOMAIN}, https://shared-chat.${CF_DOMAIN}
+      WEBUI_AUTH_TRUSTED_EMAIL_HEADER: X-authentik-email
+      WEBUI_SECRET_KEY: ${OPEN_WEBUI_SECRET_KEY}
+    volumes:
+      - ./services/open-webui/guest:/app/backend/open_webui/static/shared:ro
+      - ./volumes/open-webui:/app/backend/data
+    restart: unless-stopped
+
+
+  ################################################################################
+  # Windmill
+  ################################################################################
+
+  windmill_server:
+    image: ${WINDMILL_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.windmill.middlewares=authentik
+      - traefik.http.routers.windmill.rule=Host(`windmill.${CF_DOMAIN}`)
+      - traefik.http.services.windmill.loadBalancer.server.port=8000
+    environment:
+      DATABASE_URL: ${WINDMILL_POSTGRESQL_URL:-postgres://${WINDMILL_POSTGRESQL_USER:-windmill}:${WINDMILL_POSTGRESQL_PASSWORD}@windmill_postgresql/${WINDMILL_POSTGRESQL_NAME:-windmill}?sslmode=disable}
+      MODE: server
+    networks:
+      - windmill_backend
+      - default
+    volumes:
+      - windmill_worker_logs:/tmp/windmill/logs
+    depends_on:
+      windmill_postgresql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  windmill_lsp:
+    image: ghcr.io/windmill-labs/windmill-lsp:latest
+    logging: *default-logging
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.windmill-lsp.middlewares=authentik
+      - traefik.http.routers.windmill-lsp.rule=Host(`windmill.${CF_DOMAIN}`) && PathPrefix(`/ws`)
+      - traefik.http.services.windmill-lsp.loadBalancer.server.port=3001
+    networks:
+      - windmill_backend
+      - default
+    volumes:
+      - windmill_lsp_cache:/pyls/.cache
+    restart: unless-stopped
+
+  windmill_worker:
+    image: ${WINDMILL_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+    logging: *default-logging
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2048M
+    environment:
+      DATABASE_URL: ${WINDMILL_POSTGRESQL_URL:-postgres://${WINDMILL_POSTGRESQL_USER:-windmill}:${WINDMILL_POSTGRESQL_PASSWORD}@windmill_postgresql/${WINDMILL_POSTGRESQL_NAME:-windmill}?sslmode=disable}
+      MODE: worker
+      WORKER_GROUP: default
+    networks:
+      - windmill_backend
+    # to mount the worker folder to debug, KEEP_JOB_DIR=true and mount /tmp/windmill
+    volumes:
+      # mount the docker socket to allow to run docker containers from within the workers
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - windmill_worker_dependency_cache:/tmp/windmill/cache
+      - windmill_worker_logs:/tmp/windmill/logs
+    depends_on:
+      windmill_postgresql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # This worker is specialized for "native" jobs. Native jobs run in-process and thus are much more lightweight than other jobs
+  windmill_worker_native:
+    image: ${WINDMILL_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+    logging: *default-logging
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2048M
+    environment:
+      DATABASE_URL: ${WINDMILL_POSTGRESQL_URL:-postgres://${WINDMILL_POSTGRESQL_USER:-windmill}:${WINDMILL_POSTGRESQL_PASSWORD}@windmill_postgresql/${WINDMILL_POSTGRESQL_NAME:-windmill}?sslmode=disable}
+      MODE: worker
+      WORKER_GROUP: native
+      NUM_WORKERS: 8
+      SLEEP_QUEUE: 200
+    networks:
+      - windmill_backend
+    volumes:
+      - windmill_worker_logs:/tmp/windmill/logs
+    depends_on:
+      windmill_postgresql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # This worker is specialized for reports or scraping jobs - it is assigned the "reports" worker group
+  # which has an init script that installs chromium and can be targeted using the "chromium" worker tag
+  # windmill_worker_reports:
+  #   image: ${WINDMILL_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+  #   logging: *default-logging
+  #   deploy:
+  #     replicas: 1
+  #     resources:
+  #       limits:
+  #         cpus: "1"
+  #         memory: 2048M
+  #   environment:
+  #     DATABASE_URL: ${WINDMILL_POSTGRESQL_URL:-postgres://${WINDMILL_POSTGRESQL_USER:-windmill}:${WINDMILL_POSTGRESQL_PASSWORD}@windmill_postgresql/${WINDMILL_POSTGRESQL_NAME:-windmill}?sslmode=disable}
+  #     MODE: worker
+  #     WORKER_GROUP: reports
+  #   networks:
+  #     - windmill_backend
+  #   # to mount the worker folder to debug, KEEP_JOB_DIR=true and mount /tmp/windmill
+  #   volumes:
+  #     # mount the docker socket to allow to run docker containers from within the workers
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - windmill_worker_dependency_cache:/tmp/windmill/cache
+  #     - windmill_worker_logs:/tmp/windmill/logs
+  #   depends_on:
+  #     windmill_postgresql:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  # The indexer powers full-text job and log search, an EE feature.
+  # windmill_indexer:
+  #   image: ${WINDMILL_IMAGE:-ghcr.io/windmill-labs/windmill:main}
+  #   logging: *default-logging
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.routers.windmill-indexer.middlewares=authentik
+  #     - traefik.http.routers.windmill-indexer.rule=Host(`windmill.${CF_DOMAIN}`) && PathPrefix(`/api/srch`)
+  #     - traefik.http.services.windmill-indexer.loadBalancer.server.port=8002
+  #   environment:
+  #     DATABASE_URL: ${WINDMILL_POSTGRESQL_URL:-postgres://${WINDMILL_POSTGRESQL_USER:-windmill}:${WINDMILL_POSTGRESQL_PASSWORD}@windmill_postgresql/${WINDMILL_POSTGRESQL_NAME:-windmill}?sslmode=disable}
+  #     MODE: indexer
+  #     PORT: 8002
+  #   networks:
+  #     - windmill_backend
+  #     - default
+  #   volumes:
+  #     - windmill_index:/tmp/windmill/search
+  #     - windmill_worker_logs:/tmp/windmill/logs
+  #   depends_on:
+  #     windmill_postgresql:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  # only available on Enterprise Edition
+  # windmill_multiplayer:
+  #   image: ghcr.io/windmill-labs/windmill-multiplayer:latest
+  #   logging: *default-logging
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.routers.windmill-multiplayer.middlewares=authentik
+  #     - traefik.http.routers.windmill-multiplayer.rule=Host(`windmill.${CF_DOMAIN}`) && PathPrefix(`/ws_mp`)
+  #     - traefik.http.services.windmill-multiplayer.loadBalancer.server.port=3002
+  #   networks:
+  #     - windmill_backend
+  #     - default
+  #   restart: unless-stopped
+
+  windmill_postgresql:
+    image: postgres:16
+    logging: *default-logging
+    shm_size: 1g
+    environment:
+      POSTGRES_USER: ${WINDMILL_POSTGRESQL_USER:-windmill}
+      POSTGRES_PASSWORD: ${WINDMILL_POSTGRESQL_PASSWORD:?database password required}
+      POSTGRES_DB: ${WINDMILL_POSTGRESQL_NAME:-windmill}
+    networks:
+      - windmill_backend
+    volumes:
+      - windmill_postgresql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+
+  ################################################################################
   # Netdata
   ################################################################################
   netdata:
@@ -385,9 +613,15 @@ networks:
   authentik_backend:
   gitea_backend:
   bookstack_backend:
+  windmill_backend:
 
 volumes:
   authentik_postgresql:
   authentik_redis:
   gitea_mysql:
   bookstack_mysql:
+  windmill_index:
+  windmill_lsp_cache:
+  windmill_postgresql_data:
+  windmill_worker_dependency_cache:
+  windmill_worker_logs:

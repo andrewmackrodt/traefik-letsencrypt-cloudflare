@@ -1,0 +1,112 @@
+{
+	"status": true,
+	"name": "Open WebUI",
+	"version": "0.0.0",
+	"default_locale": "",
+	"oauth": {
+		"providers": {}
+	},
+	"features": {
+		"auth": false,
+		"auth_trusted_header": false,
+		"enable_signup_password_confirmation": false,
+		"enable_ldap": false,
+		"enable_api_key": false,
+		"enable_signup": false,
+		"enable_login_form": false,
+		"enable_websocket": true,
+		"enable_version_update_check": false,
+		"enable_direct_connections": false,
+		"enable_channels": false,
+		"enable_notes": false,
+		"enable_web_search": false,
+		"enable_code_execution": false,
+		"enable_code_interpreter": false,
+		"enable_image_generation": false,
+		"enable_autocomplete_generation": false,
+		"enable_community_sharing": false,
+		"enable_message_rating": false,
+		"enable_user_webhooks": false,
+		"enable_admin_export": false,
+		"enable_admin_chat_access": false,
+		"enable_google_drive_integration": false,
+		"enable_onedrive_integration": false
+	},
+	"default_models": "",
+	"default_prompt_suggestions": [],
+	"user_count": 0,
+	"code": {
+		"engine": ""
+	},
+	"audio": {
+		"tts": {
+			"engine": "",
+			"voice": "alloy",
+			"split_on": "punctuation"
+		},
+		"stt": {
+			"engine": ""
+		}
+	},
+	"file": {
+		"max_size": null,
+		"max_count": null,
+		"image_compression": {
+			"width": null,
+			"height": null
+		}
+	},
+	"permissions": {
+		"workspace": {
+			"models": false,
+			"knowledge": false,
+			"prompts": false,
+			"tools": false
+		},
+		"sharing": {
+			"public_models": false,
+			"public_knowledge": false,
+			"public_prompts": false,
+			"public_tools": false
+		},
+		"chat": {
+			"controls": false,
+			"valves": false,
+			"system_prompt": true,
+			"params": false,
+			"file_upload": false,
+			"delete": false,
+			"edit": false,
+			"share": false,
+			"export": false,
+			"stt": false,
+			"tts": false,
+			"call": false,
+			"multiple_models": false,
+			"temporary": false,
+			"temporary_enforced": false
+		},
+		"features": {
+			"direct_tool_servers": false,
+			"web_search": false,
+			"image_generation": false,
+			"code_interpreter": false,
+			"notes": false
+		}
+	},
+	"google_drive": {
+		"client_id": "",
+		"api_key": ""
+	},
+	"onedrive": {
+		"client_id": "",
+		"sharepoint_url": "",
+		"sharepoint_tenant_id": ""
+	},
+	"ui": {
+		"pending_user_overlay_title": "",
+		"pending_user_overlay_content": "",
+		"response_watermark": ""
+	},
+	"license_metadata": null
+}
