@@ -7,9 +7,9 @@ RUN export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -qqy apt-transport-https \
  && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add -
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 RUN . /etc/os-release \
- && echo "deb [arch=amd64] https://download.docker.com/linux/debian $VERSION_CODENAME stable" >/etc/apt/sources.list.d/docker.list
+ && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $VERSION_CODENAME stable" >/etc/apt/sources.list.d/docker.list
 
 RUN groupadd -g 998 docker
 RUN adduser jenkins docker
