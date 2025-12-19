@@ -43,6 +43,9 @@ services:
       # redirect http to https
       - --entryPoints.web.http.redirections.entryPoint.to=websecure
       - --entryPoints.web.http.redirections.entryPoint.scheme=https
+      # allow encoded forward-slash (/) in url path
+      - --entryPoints.web.http.encodedCharacters.allowEncodedSlash=true
+      - --entryPoints.websecure.http.encodedCharacters.allowEncodedSlash=true
       # configure letsencrypt acme
       - --certificatesResolvers.letsencrypt.acme.dnsChallenge=true
       - --certificatesResolvers.letsencrypt.acme.dnsChallenge.provider=cloudflare
