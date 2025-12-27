@@ -366,15 +366,16 @@ services:
       - traefik.http.routers.openWebUiGuest.service=openWebUiGuest
       - traefik.http.services.openWebUiGuest.loadBalancer.server.port=8080
       # authenticated access
-      - traefik.http.routers.openWebUi.middlewares=openWebUiHeaders
       - traefik.http.routers.openWebUi.middlewares=authentik
       - traefik.http.routers.openWebUi.rule=Host(`chat.${CF_DOMAIN}`)
       - traefik.http.routers.openWebUi.service=openWebUi
       - traefik.http.services.openWebUi.loadBalancer.server.port=8080
     environment:
-      CORS_ALLOW_ORIGIN: https://chat.${CF_DOMAIN}, https://shared-chat.${CF_DOMAIN}
+      CORS_ALLOW_ORIGIN: https://chat.${CF_DOMAIN};https://shared-chat.${CF_DOMAIN}
+      WEBUI_AUTH_COOKIE_SECURE: 'true'
       WEBUI_AUTH_TRUSTED_EMAIL_HEADER: X-authentik-email
       WEBUI_SECRET_KEY: ${OPEN_WEBUI_SECRET_KEY}
+      WEBUI_SESSION_COOKIE_SECURE: 'true'
     volumes:
       - ./services/open-webui/guest:/app/backend/open_webui/static/shared:ro
       - ./volumes/open-webui:/app/backend/data
